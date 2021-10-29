@@ -145,12 +145,12 @@ def setup(args):
     cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
     cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")  # Let training initialize from model zoo
     cfg.MODEL.BACKBONE.FREEZE_AT = 2
-    cfg.TEST.EVAL_PERIOD = 5000
+    cfg.TEST.EVAL_PERIOD = 2000
     cfg.SOLVER.CHECKPOINT_PERIOD = 500
-    cfg.SOLVER.LR_SCHEDULER_NAME = "WarmupMultiStepLR"
-    cfg.SOLVER.STEPS: (2500, 7500, 15000)
-    cfg.SOLVER.GAMMA = 0.9
-    cfg.SOLVER.BASE_LR = 0.0002
+    cfg.SOLVER.LR_SCHEDULER_NAME = "WarmupCosineLR"
+
+
+    cfg.SOLVER.BASE_LR = 0.001
     cfg.SOLVER.IMS_PER_BATCH = 2
     cfg.SOLVER.MAX_ITER = 100000
     cfg.DATASETS.TRAIN = ("nuimages_train_trafficone",)
@@ -169,13 +169,13 @@ def main(args):
     MetadataCatalog.get("nuimages_train_trafficone").thing_classes = category_dict
     data_val = DatasetCatalog.register("nuimages_val_trafficone", get_data(args, args.val_file))
     MetadataCatalog.get("nuimages_val_trafficone").thing_classes = category_dict
+    data_test = DatasetCatalog.register("nuimages_test_trafficone", get_data(args, args.test_file))
+    MetadataCatalog.get("nuimages_test_trafficone").thing_classes = category_dict
 
     model = build_model(cfg)
     logger.info("Model:\n{}".format(model))
     if args.eval_only:
-        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
-            cfg.MODEL.WEIGHTS, resume=args.resume
-        )
+        DetectionCheckpointer(model).load(args.ckpt_file)
         return do_test(cfg, model)
     
     do_train(cfg, model, resume=args.resume)
@@ -191,6 +191,8 @@ if __name__ == "__main__":
                         default='val_val_trafficcone_detectron.json') 
     parser.add_argument('--test_file', type=str,\
                         default='val_test_trafficcone_detectron.json') 
+    parser.add_argument('--ckpt_file', type=str,\
+                        default='/usr0/tma1/traffic_cone_detection/output/2021-10-26-01-38-57/model_0076499.pth')
 
     args = parser.parse_args()
 
