@@ -142,20 +142,21 @@ def setup(args):
     cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"))
 
     # Modified configurations
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
-    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")  # Let training initialize from model zoo
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 5
+    # cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")  # Let training initialize from model zoo
     cfg.MODEL.BACKBONE.FREEZE_AT = 2
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.05
     cfg.TEST.EVAL_PERIOD = 2000
     cfg.SOLVER.CHECKPOINT_PERIOD = 500
     cfg.SOLVER.LR_SCHEDULER_NAME = "WarmupCosineLR"
-
 
     cfg.SOLVER.BASE_LR = 0.001
     cfg.SOLVER.IMS_PER_BATCH = 2
     cfg.SOLVER.MAX_ITER = 100000
     cfg.DATASETS.TRAIN = ("nuimages_train_trafficone",)
-    cfg.DATASETS.TEST = ("nuimages_val_trafficone",)
+    cfg.DATASETS.TEST = ("nuimages_test_trafficone",)
     cfg.OUTPUT_DIR = os.path.join('/usr0/tma1/traffic_cone_detection/output', dt_string)
+    # cfg.MODEL.WEIGHTS = os.path.join(cfg.OUTPUT_DIR, "model_0076499.pth")
     if not os.path.exists(cfg.OUTPUT_DIR):
         os.mkdir(cfg.OUTPUT_DIR)
     return cfg
@@ -164,7 +165,11 @@ def main(args):
     cfg = setup(args)
 
     # Register datasets
-    category_dict = {0: 'traffic_cones'}
+    category_dict = {0: 'human.pedestrian.construction_worker', 
+                     1: 'movable_object.barrier',
+                     2: 'movable_object.debris',
+                     3: 'movable_object.trafficcone',
+                     4: 'vehicle.construction'}
     data_train = DatasetCatalog.register("nuimages_train_trafficone", get_data(args, args.train_file))
     MetadataCatalog.get("nuimages_train_trafficone").thing_classes = category_dict
     data_val = DatasetCatalog.register("nuimages_val_trafficone", get_data(args, args.val_file))
@@ -186,13 +191,13 @@ if __name__ == "__main__":
     parser.add_argument('--dataroot', type=str, \
                         default='/usr0/tma1/datasets/nuimages/detectron_data')
     parser.add_argument('--train_file', type=str,\
-                        default='v1.0-train_trafficcone_detectron.json') 
+                        default='v1.0-train_construction_detectron.json') 
     parser.add_argument('--val_file', type=str,\
-                        default='val_val_trafficcone_detectron.json') 
+                        default='val_val_construction_detectron.json') 
     parser.add_argument('--test_file', type=str,\
-                        default='val_test_trafficcone_detectron.json') 
-    parser.add_argument('--ckpt_file', type=str,\
-                        default='/usr0/tma1/traffic_cone_detection/output/2021-10-26-01-38-57/model_0076499.pth')
+                        default='val_test_construction_detectron.json') 
+    # parser.add_argument('--ckpt_file', type=str,\
+    #                    default='/usr0/tma1/traffic_cone_detection/output/2021-10-26-01-38-57/model_0076499.pth')
 
     args = parser.parse_args()
 
