@@ -1,0 +1,18 @@
+_BASE_: "./Base-RCNN-DilatedC5.yaml"
+MODEL:
+  WEIGHTS: "/usr1/home/tma1/Desktop/construction_detection/detectron_dev/models/model_final_68d202.pkl"
+  MASK_ON: False
+  RESNETS:
+    DEPTH: 50
+  ROI_HEADS:
+    NUM_CLASSES: 23
+SOLVER:
+  BASE_LR: 0.001
+  STEPS: (210000, 250000)
+  MAX_ITER: 270000
+  IMS_PER_BATCH: 8
+TEST:
+  EVAL_PERIOD: 260
+DATASETS:
+  TRAIN: ("nuscenes_train_detectron",)
+  TEST: ("nuscenes_val_mini_detectron",)

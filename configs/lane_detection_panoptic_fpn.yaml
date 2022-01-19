@@ -1,0 +1,32 @@
+_BASE_: "Base-Panoptic-FPN.yaml"
+MODEL:
+  WEIGHTS: "detectron2://ImageNetPretrained/MSRA/R-50.pkl"
+  RESNETS:
+    DEPTH: 50
+  ROI_HEADS:
+    NUM_CLASSES: 41
+  SEM_SEG_HEAD:
+      NUM_CLASSES: 41
+  BACKBONE:
+    FREEZE_AT: 2
+SOLVER:
+  BASE_LR: 0.001
+  STEPS: (210000, 250000)
+  MAX_ITER: 270000
+  IMS_PER_BATCH: 2
+  LR_SCHEDULER_NAME: WarmupMultiStepLR
+  CHECKPOINT_PERIOD: 1000
+TEST:
+  EVAL_PERIOD: 250
+DATASETS:
+  META_FILE_PATH: '/usr0/tma1/datasets/bdd100k/bdd100k_data/coco_labels/pan_seg/metadata.json'
+  TRAIN: ("pan_seg_train_detectron",)
+  TEST: ("pan_seg_val_detectron",)
+  PAN_ROOT: '/usr0/tma1/datasets/bdd100k/bdd100k_data/coco_labels/pan_seg/'
+  INS_ROOT: '/usr0/tma1/datasets/bdd100k/bdd100k_data/coco_labels/ins_seg/'
+  IMAGE_ROOT: '/usr0/tma1/datasets/bdd100k/bdd100k_data/images/10k/'
+OUTPUT:
+  RESUME: '2021-11-30-22-24-34'
+  OUTPUT_DIR: '/usr0/tma1/lane_detection/segmentation_output'
+INPUT:
+  MASK_FORMAT: 'bitmask'

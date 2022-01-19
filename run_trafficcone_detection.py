@@ -10,11 +10,6 @@ from torch.nn.parallel import DistributedDataParallel
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer, PeriodicCheckpointer
 from detectron2.config import get_cfg
-from detectron2.data import (
-    MetadataCatalog,
-    build_detection_test_loader,
-    build_detection_train_loader,
-)
 from detectron2.engine import default_argument_parser, default_setup, default_writers, launch
 from detectron2.evaluation import (
     CityscapesInstanceEvaluator,
@@ -37,8 +32,10 @@ from detectron2.data import (
     MetadataCatalog,
     build_detection_train_loader,
     build_detection_test_loader,
-    DatasetMapper
+    DatasetMapper,
 )
+from detectron2.data.build import get_detection_dataset_dicts
+from utils.imbalance_loader import build_detectron_train_imbalance_loader
 
 from datetime import datetime
 import json
@@ -96,12 +93,13 @@ def do_train(cfg, model, resume=False):
 
     # compared to "train_net.py", we do not support accurate timing and
     # precise BN here, because they are not trivial to implement in a small training loop
-    data_loader = build_detection_train_loader(cfg)
+    # data_loader = build_detectron_train_imbalance_loader(cfg)
+    data_loader = build_detectron_train_imbalance_loader(cfg)
     logger.info("Starting training from iteration {}".format(start_iter))
     with EventStorage(start_iter) as storage:
         for data, iteration in zip(data_loader, range(start_iter, max_iter)):
             storage.iter = iteration
-
+            # from pdb import set_trace as bp; bp()
             loss_dict = model(data)
             losses = sum(loss_dict.values())
             assert torch.isfinite(losses).all(), loss_dict
@@ -122,10 +120,11 @@ def do_train(cfg, model, resume=False):
                 and iteration != max_iter - 1
             ):
                 do_test(cfg, model)
+                logger.info("Done with test")
                 # Compared to "train_net.py", the test results are not dumped to EventStorage
 
             if iteration - start_iter > 5 and (
-                (iteration + 1) % 20 == 0 or iteration == max_iter - 1
+                (iteration + 1) % 50 == 0 or iteration == max_iter - 1
             ):
                 for writer in writers:
                     writer.write()
@@ -142,21 +141,22 @@ def setup(args):
     cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"))
 
     # Modified configurations
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 5
-    # cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")  # Let training initialize from model zoo
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
+    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")  # Let training initialize from model zoo
     cfg.MODEL.BACKBONE.FREEZE_AT = 2
-    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.05
-    cfg.TEST.EVAL_PERIOD = 2000
-    cfg.SOLVER.CHECKPOINT_PERIOD = 500
+    cfg.TEST.EVAL_PERIOD = 5000
+    cfg.SOLVER.CHECKPOINT_PERIOD = 1000
     cfg.SOLVER.LR_SCHEDULER_NAME = "WarmupCosineLR"
+    if args.cpu:
+        cfg.MODEL.DEVICE='cpu'
 
-    cfg.SOLVER.BASE_LR = 0.001
+    cfg.SOLVER.BASE_LR = 0.0005
     cfg.SOLVER.IMS_PER_BATCH = 2
     cfg.SOLVER.MAX_ITER = 100000
     cfg.DATASETS.TRAIN = ("nuimages_train_trafficone",)
     cfg.DATASETS.TEST = ("nuimages_test_trafficone",)
     cfg.OUTPUT_DIR = os.path.join('/usr0/tma1/traffic_cone_detection/output', dt_string)
-    # cfg.MODEL.WEIGHTS = os.path.join(cfg.OUTPUT_DIR, "model_0076499.pth")
+
     if not os.path.exists(cfg.OUTPUT_DIR):
         os.mkdir(cfg.OUTPUT_DIR)
     return cfg
@@ -165,11 +165,8 @@ def main(args):
     cfg = setup(args)
 
     # Register datasets
-    category_dict = {0: 'human.pedestrian.construction_worker', 
-                     1: 'movable_object.barrier',
-                     2: 'movable_object.debris',
-                     3: 'movable_object.trafficcone',
-                     4: 'vehicle.construction'}
+    cfg.DATASETS.CATEGORIES = ['vehicle.construction'] # ['human.pedestrian.construction_worker', 'movable_object.barrier', 'movable_object.trafficcone', 'vehicle.construction']
+    category_dict = {i: name for i, name in enumerate(cfg.DATASETS.CATEGORIES)}
     data_train = DatasetCatalog.register("nuimages_train_trafficone", get_data(args, args.train_file))
     MetadataCatalog.get("nuimages_train_trafficone").thing_classes = category_dict
     data_val = DatasetCatalog.register("nuimages_val_trafficone", get_data(args, args.val_file))
@@ -182,8 +179,10 @@ def main(args):
     if args.eval_only:
         DetectionCheckpointer(model).load(args.ckpt_file)
         return do_test(cfg, model)
-    
     do_train(cfg, model, resume=args.resume)
+
+    logger.info("Finished training...")
+
     return do_test(cfg, model)
 
 if __name__ == "__main__":
@@ -191,14 +190,14 @@ if __name__ == "__main__":
     parser.add_argument('--dataroot', type=str, \
                         default='/usr0/tma1/datasets/nuimages/detectron_data')
     parser.add_argument('--train_file', type=str,\
-                        default='v1.0-train_construction_detectron.json') 
+                        default='v1.0-train_construction_vehicle_detectron.json') 
     parser.add_argument('--val_file', type=str,\
-                        default='val_val_construction_detectron.json') 
+                        default='val_val_construction_vehicle_detectron.json') 
     parser.add_argument('--test_file', type=str,\
-                        default='val_test_construction_detectron.json') 
-    # parser.add_argument('--ckpt_file', type=str,\
-    #                    default='/usr0/tma1/traffic_cone_detection/output/2021-10-26-01-38-57/model_0076499.pth')
-
+                        default='val_test_construction_vehicle_detectron.json') 
+    parser.add_argument('--ckpt_file', type=str,\
+            default='/usr0/tma1/traffic_cone_detection/output/2021-11-06-22-59-01/model_final.pth')
+    parser.add_argument('--cpu', action='store_true')
     args = parser.parse_args()
 
     print("Command Line Args:", args)
